@@ -47,6 +47,16 @@ jobs:
           git commit -m "Update KOSPI investor data through ${latest}"
           git push
 
+      # ubuntu-latest ships no Hangul glyphs, so every Korean character in the
+      # report renders as tofu (□) without this.
+      - name: Install a Korean font
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-nanum
+          fc-cache -f
+          echo "Korean families available:"
+          fc-list :lang=ko family | sort -u | head
+
       # Screenshot the very page the artifact serves, so the image in Telegram and
       # the page on claude.ai can never drift apart.
       - name: Render the report to PNG

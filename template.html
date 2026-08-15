@@ -54,8 +54,11 @@
   body {
     background: var(--plane);
     color: var(--ink);
+    /* NanumGothic / Noto Sans CJK KR are the Linux fallbacks — without a Hangul
+       face named here, the CI screenshot renders every Korean glyph as tofu. */
     font-family: "Pretendard", "Pretendard Variable", system-ui, -apple-system,
-                 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+                 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR",
+                 "Noto Sans CJK KR", "NanumGothic", "Nanum Gothic", sans-serif;
     font-size: 15px;
     line-height: 1.6;
     margin: 0;
