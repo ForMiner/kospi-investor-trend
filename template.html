@@ -1,0 +1,591 @@
+<title>코스피 수급 추이</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:      #f9f9f7;
+    --surface:    #fcfcfb;
+    --ink:        #0b0b0b;
+    --ink-2:      #52514e;
+    --muted:      #898781;
+    --grid:       #e1e0d9;
+    --axis:       #c3c2b7;
+    --hairline:   rgba(11, 11, 11, 0.10);
+    --wash:       rgba(11, 11, 11, 0.04);
+    --s1:         #2a78d6;
+    --s2:         #eb6834;
+    --s3:         #1baf7a;
+    --focus:      #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:    #0d0d0d;
+      --surface:  #1a1a19;
+      --ink:      #ffffff;
+      --ink-2:    #c3c2b7;
+      --muted:    #898781;
+      --grid:     #2c2c2a;
+      --axis:     #383835;
+      --hairline: rgba(255, 255, 255, 0.10);
+      --wash:     rgba(255, 255, 255, 0.05);
+      --s1:       #3987e5;
+      --s2:       #d95926;
+      --s3:       #199e70;
+      --focus:    #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:    #0d0d0d;
+    --surface:  #1a1a19;
+    --ink:      #ffffff;
+    --ink-2:    #c3c2b7;
+    --muted:    #898781;
+    --grid:     #2c2c2a;
+    --axis:     #383835;
+    --hairline: rgba(255, 255, 255, 0.10);
+    --wash:     rgba(255, 255, 255, 0.05);
+    --s1:       #3987e5;
+    --s2:       #d95926;
+    --s3:       #199e70;
+    --focus:    #3987e5;
+  }
+
+  body {
+    background: var(--plane);
+    color: var(--ink);
+    font-family: "Pretendard", "Pretendard Variable", system-ui, -apple-system,
+                 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 32px 20px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.10em;
+    text-transform: uppercase; color: var(--muted); margin: 0;
+  }
+  h1 { font-size: 30px; font-weight: 650; letter-spacing: -0.015em; margin: 6px 0 0; text-wrap: balance; }
+  .meta { margin: 10px 0 0; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .meta span + span::before { content: "·"; margin: 0 8px; color: var(--axis); }
+
+  /* ---- summary tiles ---- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .tile-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); }
+  .key { width: 14px; height: 3px; border-radius: 2px; flex: none; }
+  .tile-value { font-size: 28px; font-weight: 640; letter-spacing: -0.02em; line-height: 1.15; }
+  .tile-sub { font-size: 12px; color: var(--muted); }
+
+  /* ---- cards ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+  .card-title { font-size: 17px; font-weight: 620; margin: 0; letter-spacing: -0.01em; }
+  .card-sub { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .card-head .spacer { flex: 1 1 auto; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+
+  .plot { position: relative; }
+  .plot svg { display: block; width: 100%; height: auto; }
+  .plot svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+  .tt {
+    position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+    padding: 9px 11px; min-width: 148px; font-size: 12.5px;
+    transition: opacity 90ms ease;
+  }
+  .tt.on { opacity: 1; }
+  .tt-head { color: var(--muted); font-size: 11.5px; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+  .tt-row { display: flex; align-items: center; gap: 8px; }
+  .tt-row + .tt-row { margin-top: 3px; }
+  .tt-name { color: var(--ink-2); }
+  .tt-val { margin-left: auto; font-weight: 620; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .btn {
+    font: inherit; font-size: 12.5px; color: var(--ink-2);
+    background: transparent; border: 1px solid var(--hairline); border-radius: 6px;
+    padding: 4px 11px; cursor: pointer;
+  }
+  .btn:hover { background: var(--wash); }
+  .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .table-wrap { overflow-x: auto; }
+  .table-wrap[hidden] { display: none; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; color: var(--muted); font-size: 12px; padding-bottom: 8px; }
+  th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--ink-2); font-weight: 600; }
+  tbody td { color: var(--ink); }
+
+  footer { font-size: 12px; color: var(--muted); line-height: 1.75; }
+  footer a { color: var(--ink-2); }
+  footer p { margin: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">KOSPI · 투자자별 순매수</p>
+    <h1>코스피 수급 추이</h1>
+    <p class="meta"><span>기준일 <b id="m-latest">–</b></span><span>갱신 <span id="m-gen">–</span></span><span>단위 억원</span></p>
+  </header>
+
+  <section class="tiles" id="tiles" aria-label="최근 영업일 순매수 요약"></section>
+
+  <section class="card" id="card-month"></section>
+  <section class="card" id="card-week"></section>
+  <section class="card" id="card-day"></section>
+
+  <footer>
+    <p>순매수 = 매수 − 매도. 양수는 순매수(자금 유입), 음수는 순매도(자금 유출)입니다. 기관은 금융투자·보험·투신·은행·기타금융·연기금을 합산한 기관계 기준입니다.</p>
+    <p>월별·주별 차트의 마지막 구간은 아직 진행 중이며 속이 빈 점으로 표시됩니다.</p>
+    <p>출처: <a href="https://finance.naver.com/sise/investorDealTrendDay.naver" target="_blank" rel="noopener noreferrer">네이버 금융 — 투자자별 매매동향</a></p>
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+const SERIES = [
+  { key: "individual",  name: "개인",   color: "var(--s1)" },
+  { key: "foreign",     name: "외국인", color: "var(--s2)" },
+  { key: "institution", name: "기관",   color: "var(--s3)" }
+];
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const rows = (DATA && DATA.rows) || [];
+rows.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+/* ---------- helpers ---------- */
+
+function el(tag, attrs, text) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function h(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function parseDate(s) {
+  const p = s.split("-");
+  return new Date(+p[0], +p[1] - 1, +p[2]);
+}
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+
+// Precise value, always in 억원 — used by tooltips and the table view.
+function exact(v) { return v.toLocaleString("ko-KR") + "억"; }
+
+// Compact value for axis ticks and end labels; unit chosen per chart.
+function compact(v, unit) {
+  if (unit === "조") {
+    const t = v / 10000;
+    return (Math.abs(t % 1) < 0.05 ? t.toFixed(0) : t.toFixed(1)) + "조";
+  }
+  return Math.round(v).toLocaleString("ko-KR");
+}
+// Switch to 조 only past 10조, where comma-grouped 억 ticks get unwieldy —
+// below that, 억 keeps a day's figures at full resolution.
+function pickUnit(vals) {
+  return Math.max.apply(null, vals.map(Math.abs)) >= 100000 ? "조" : "억";
+}
+
+/* ---------- aggregation ---------- */
+
+function sumBuckets(list) {
+  const out = { individual: 0, foreign: 0, institution: 0 };
+  for (const r of list) for (const s of SERIES) out[s.key] += r[s.key];
+  return out;
+}
+
+function byMonth() {
+  const map = new Map();
+  for (const r of rows) {
+    const k = r.date.slice(0, 7);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  }
+  let keys = Array.from(map.keys());
+  // The oldest month is clipped by the fetch window, so it would understate.
+  if (keys.length > 1) keys = keys.slice(1);
+  keys = keys.slice(-13);
+  return keys.map(k => {
+    const v = sumBuckets(map.get(k));
+    v.label = k.slice(2).replace("-", ".");
+    v.full = k.slice(0, 4) + "년 " + (+k.slice(5, 7)) + "월";
+    v.days = map.get(k).length;
+    return v;
+  });
+}
+
+function byWeek() {
+  const map = new Map();
+  for (const r of rows) {
+    const d = parseDate(r.date);
+    const back = (d.getDay() + 6) % 7;           // Monday-start week
+    const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
+    const k = mon.getFullYear() + "-" + pad(mon.getMonth() + 1) + "-" + pad(mon.getDate());
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  }
+  const keys = Array.from(map.keys()).slice(-16);
+  return keys.map(k => {
+    const v = sumBuckets(map.get(k));
+    v.label = k.slice(5).replace("-", "/");
+    v.full = k.slice(2).replace(/-/g, ".") + " 주";
+    v.days = map.get(k).length;
+    return v;
+  });
+}
+
+function byDay() {
+  return rows.slice(-20).map(r => {
+    const v = { individual: r.individual, foreign: r.foreign, institution: r.institution };
+    v.label = r.date.slice(5).replace("-", "/");
+    v.full = r.date.replace(/-/g, ".");
+    v.days = 1;
+    return v;
+  });
+}
+
+// The final month/week bucket is still filling unless the last trading day closes it.
+function partialFlags(buckets, kind) {
+  const flags = buckets.map(() => false);
+  if (!buckets.length || !rows.length) return flags;
+  const last = parseDate(rows[rows.length - 1].date);
+  if (kind === "week") {
+    flags[flags.length - 1] = last.getDay() < 5;   // not yet Friday
+  } else if (kind === "month") {
+    let end = new Date(last.getFullYear(), last.getMonth() + 1, 0);
+    while (end.getDay() === 0 || end.getDay() === 6) end.setDate(end.getDate() - 1);
+    flags[flags.length - 1] = last.getDate() < end.getDate();
+  }
+  return flags;
+}
+
+/* ---------- scale ---------- */
+
+function niceScale(min, max, count) {
+  min = Math.min(0, min);
+  max = Math.max(0, max);
+  if (min === max) max = 1;
+  const step0 = (max - min) / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const n = step0 / mag;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+  const lo = Math.floor(min / step) * step;
+  const hi = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step * 1e-9; v += step) ticks.push(Math.round(v * 1e6) / 1e6);
+  return { lo: lo, hi: hi, ticks: ticks };
+}
+
+/* ---------- chart ---------- */
+
+function drawChart(plot, tip, buckets, partial, unit) {
+  const W = plot.clientWidth || 900;
+  const H = 300;
+  const ml = 58, mr = 88, mt = 18, mb = 32;
+  const pw = W - ml - mr, ph = H - mt - mb;
+  const n = buckets.length;
+
+  plot.querySelectorAll("svg").forEach(s => s.remove());
+  const svg = el("svg", {
+    width: W, height: H, viewBox: "0 0 " + W + " " + H,
+    role: "img", tabindex: "0",
+    "aria-label": "투자자별 순매수 추이 그래프. 값은 아래 표 보기에서도 확인할 수 있습니다."
+  });
+
+  let lo = Infinity, hi = -Infinity;
+  for (const b of buckets) for (const s of SERIES) {
+    if (b[s.key] < lo) lo = b[s.key];
+    if (b[s.key] > hi) hi = b[s.key];
+  }
+  const sc = niceScale(lo, hi, 4);
+  const X = i => n === 1 ? ml + pw / 2 : ml + (i * pw) / (n - 1);
+  const Y = v => mt + ph - ((v - sc.lo) / (sc.hi - sc.lo)) * ph;
+
+  // gridlines + y ticks
+  for (const t of sc.ticks) {
+    const y = Y(t);
+    const zero = Math.abs(t) < 1e-9;
+    svg.appendChild(el("line", {
+      x1: ml, x2: ml + pw, y1: y, y2: y,
+      stroke: zero ? "var(--axis)" : "var(--grid)", "stroke-width": 1
+    }));
+    svg.appendChild(el("text", {
+      x: ml - 10, y: y + 4, "text-anchor": "end",
+      "font-size": 11, fill: "var(--muted)", "font-variant-numeric": "tabular-nums"
+    }, compact(t, unit)));
+  }
+
+  // x tick labels, thinned to fit
+  const every = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(pw / 58))));
+  buckets.forEach((b, i) => {
+    if (i % every !== 0 && i !== n - 1) return;
+    if (i !== n - 1 && (n - 1 - i) < every * 0.6) return;
+    svg.appendChild(el("text", {
+      x: X(i), y: mt + ph + 20, "text-anchor": "middle",
+      "font-size": 11, fill: "var(--muted)", "font-variant-numeric": "tabular-nums"
+    }, b.label));
+  });
+
+  // series lines
+  SERIES.forEach(s => {
+    const d = buckets.map((b, i) => (i ? "L" : "M") + X(i) + " " + Y(b[s.key])).join(" ");
+    svg.appendChild(el("path", {
+      d: d, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round"
+    }));
+  });
+
+  // end markers — hollow when the final bucket is still filling
+  const lastPartial = partial[n - 1];
+  SERIES.forEach(s => {
+    const cx = X(n - 1), cy = Y(buckets[n - 1][s.key]);
+    svg.appendChild(el("circle", {
+      cx: cx, cy: cy, r: 4.5,
+      fill: lastPartial ? "var(--surface)" : s.color,
+      stroke: lastPartial ? s.color : "var(--surface)", "stroke-width": 2
+    }));
+  });
+
+  // end labels, nudged apart with leader lines when the lines converge
+  const items = SERIES.map(s => ({
+    name: s.name, color: s.color,
+    val: buckets[n - 1][s.key],
+    y0: Y(buckets[n - 1][s.key]), y: 0
+  }));
+  items.sort((a, b) => a.y0 - b.y0);
+  const gap = 34;   // clears the two-line label (name over value) with air to spare
+  items.forEach((it, i) => { it.y = i ? Math.max(it.y0, items[i - 1].y + gap) : it.y0; });
+  const over = items[items.length - 1].y - (mt + ph);
+  if (over > 0) items.forEach(it => { it.y -= over; });
+  if (items[0].y < mt + 8) {
+    const up = mt + 8 - items[0].y;
+    items.forEach(it => { it.y += up; });
+  }
+
+  const lx = X(n - 1);
+  items.forEach(it => {
+    if (Math.abs(it.y - it.y0) > 2) {
+      svg.appendChild(el("polyline", {
+        points: [lx + 7, it.y0, lx + 14, it.y, lx + 18, it.y].join(" "),
+        fill: "none", stroke: "var(--axis)", "stroke-width": 1
+      }));
+    }
+    svg.appendChild(el("text", {
+      x: lx + 21, y: it.y - 6, "font-size": 10.5, fill: "var(--muted)"
+    }, it.name));
+    svg.appendChild(el("text", {
+      x: lx + 21, y: it.y + 10, "font-size": 12.5, "font-weight": 620,
+      fill: "var(--ink)", "font-variant-numeric": "tabular-nums"
+    }, compact(it.val, unit)));
+  });
+
+  // hover layer
+  const cross = el("line", {
+    y1: mt, y2: mt + ph, stroke: "var(--axis)", "stroke-width": 1, opacity: 0
+  });
+  svg.appendChild(cross);
+  const dots = SERIES.map(s => {
+    const c = el("circle", { r: 4, fill: s.color, stroke: "var(--surface)", "stroke-width": 2, opacity: 0 });
+    svg.appendChild(c);
+    return c;
+  });
+  const hit = el("rect", { x: ml, y: mt, width: pw, height: ph, fill: "transparent" });
+  svg.appendChild(hit);
+
+  let active = -1;
+  function show(i) {
+    if (i < 0 || i >= n) return;
+    active = i;
+    const b = buckets[i], x = X(i);
+    cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("opacity", 1);
+    SERIES.forEach((s, k) => {
+      dots[k].setAttribute("cx", x);
+      dots[k].setAttribute("cy", Y(b[s.key]));
+      dots[k].setAttribute("opacity", 1);
+    });
+
+    tip.textContent = "";
+    const head = h("div", "tt-head", b.full + (partial[i] ? " · 진행 중" : ""));
+    tip.appendChild(head);
+    SERIES.forEach(s => {
+      const row = h("div", "tt-row");
+      const key = h("span", "key");
+      key.style.background = s.color;
+      row.appendChild(key);
+      row.appendChild(h("span", "tt-name", s.name));
+      row.appendChild(h("span", "tt-val", exact(b[s.key])));
+      tip.appendChild(row);
+    });
+    tip.classList.add("on");
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let tx = x + 16;
+    if (tx + tw > W - 4) tx = x - tw - 16;
+    tip.style.left = Math.max(4, tx) + "px";
+    tip.style.top = Math.max(4, Math.min(mt + ph - th, mt + ph / 2 - th / 2)) + "px";
+  }
+  function hide() {
+    active = -1;
+    cross.setAttribute("opacity", 0);
+    dots.forEach(d => d.setAttribute("opacity", 0));
+    tip.classList.remove("on");
+  }
+
+  svg.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) * (W / r.width);
+    if (mx < ml - 12 || mx > ml + pw + 12) { hide(); return; }
+    show(Math.max(0, Math.min(n - 1, Math.round(((mx - ml) / pw) * (n - 1)))));
+  });
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("focus", () => show(active < 0 ? n - 1 : active));
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", ev => {
+    if (ev.key === "ArrowLeft") { show(Math.max(0, (active < 0 ? n - 1 : active) - 1)); ev.preventDefault(); }
+    else if (ev.key === "ArrowRight") { show(Math.min(n - 1, (active < 0 ? n - 1 : active) + 1)); ev.preventDefault(); }
+    else if (ev.key === "Escape") hide();
+  });
+
+  plot.insertBefore(svg, tip);
+}
+
+/* ---------- card assembly ---------- */
+
+function buildCard(host, title, sub, buckets, kind, colHead) {
+  const partial = partialFlags(buckets, kind);
+  const vals = [];
+  for (const b of buckets) for (const s of SERIES) vals.push(b[s.key]);
+  const unit = pickUnit(vals);
+
+  const head = h("div", "card-head");
+  const box = h("div");
+  box.appendChild(h("h2", "card-title", title));
+  box.appendChild(h("p", "card-sub", sub + " · 축 단위 " + (unit === "조" ? "조원" : "억원")));
+  head.appendChild(box);
+  head.appendChild(h("div", "spacer"));
+  const toggle = h("button", "btn", "표 보기");
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", "false");
+  head.appendChild(toggle);
+  host.appendChild(head);
+
+  const legend = h("div", "legend");
+  SERIES.forEach(s => {
+    const item = h("div", "legend-item");
+    const key = h("span", "key");
+    key.style.background = s.color;
+    item.appendChild(key);
+    item.appendChild(h("span", null, s.name));
+    legend.appendChild(item);
+  });
+  host.appendChild(legend);
+
+  const plot = h("div", "plot");
+  const tip = h("div", "tt");
+  plot.appendChild(tip);
+  host.appendChild(plot);
+
+  // table view — the WCAG-clean twin of the chart
+  const tw = h("div", "table-wrap");
+  tw.hidden = true;
+  const table = document.createElement("table");
+  const cap = document.createElement("caption");
+  cap.textContent = title + " (억원)";
+  table.appendChild(cap);
+  const thead = document.createElement("thead");
+  const hr = document.createElement("tr");
+  [colHead, "개인", "외국인", "기관"].forEach(t => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = t;
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  buckets.slice().reverse().forEach((b, ri) => {
+    const idx = buckets.length - 1 - ri;
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = b.full + (partial[idx] ? " (진행 중)" : "");
+    tr.appendChild(th);
+    SERIES.forEach(s => {
+      const td = document.createElement("td");
+      td.textContent = b[s.key].toLocaleString("ko-KR");
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  tw.appendChild(table);
+  host.appendChild(tw);
+
+  toggle.addEventListener("click", () => {
+    tw.hidden = !tw.hidden;
+    toggle.textContent = tw.hidden ? "표 보기" : "표 닫기";
+    toggle.setAttribute("aria-expanded", String(!tw.hidden));
+  });
+
+  return () => drawChart(plot, tip, buckets, partial, unit);
+}
+
+/* ---------- boot ---------- */
+
+const months = byMonth(), weeks = byWeek(), days = byDay();
+
+document.getElementById("m-latest").textContent = (DATA.latestDate || "").replace(/-/g, ".");
+document.getElementById("m-gen").textContent = DATA.generatedAt || "";
+
+const latest = rows[rows.length - 1];
+const tiles = document.getElementById("tiles");
+SERIES.forEach(s => {
+  const v = latest[s.key];
+  const tile = h("div", "tile");
+  const lab = h("div", "tile-label");
+  const key = h("span", "key");
+  key.style.background = s.color;
+  lab.appendChild(key);
+  lab.appendChild(h("span", null, s.name));
+  tile.appendChild(lab);
+  tile.appendChild(h("div", "tile-value", v.toLocaleString("ko-KR")));
+  tile.appendChild(h("div", "tile-sub", (v >= 0 ? "▲ 순매수" : "▼ 순매도") + " · 억원"));
+  tiles.appendChild(tile);
+});
+
+const redraws = [
+  buildCard(document.getElementById("card-month"), "월별 추이", months.length + "개월", months, "month", "월"),
+  buildCard(document.getElementById("card-week"), "주별 추이", weeks.length + "주 · 주 시작일 기준", weeks, "week", "주"),
+  buildCard(document.getElementById("card-day"), "최근 20영업일", days.length + "영업일", days, "day", "날짜")
+];
+
+function redrawAll() { redraws.forEach(f => f()); }
+redrawAll();
+
+let t = null;
+window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(redrawAll, 120); });
+</script>
