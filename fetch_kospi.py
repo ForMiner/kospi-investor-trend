@@ -97,6 +97,16 @@ def load_cache():
     return by_date
 
 
+def notify_line(r):
+    """One-line summary for the daily push, e.g.
+    08/14 코스피 순매수(억) 개인 -19,820 · 외국인 +30,387 · 기관 -10,298"""
+    def signed(v):
+        return ("+" if v > 0 else "") + "{:,}".format(v)
+    return "%s/%s 코스피 순매수(억) 개인 %s · 외국인 %s · 기관 %s" % (
+        r["date"][5:7], r["date"][8:10],
+        signed(r["individual"]), signed(r["foreign"]), signed(r["institution"]))
+
+
 def render(all_rows, target_start):
     """Write dist/index.html from rows already in hand. Never touches the network."""
     window = [r for r in all_rows if r["date"] >= target_start]
@@ -120,6 +130,7 @@ def render(all_rows, target_start):
     latest = all_rows[-1]
     print("LATEST %s individual=%d foreign=%d institution=%d"
           % (latest["date"], latest["individual"], latest["foreign"], latest["institution"]))
+    print("NOTIFY %s" % notify_line(latest))
     return 0
 
 

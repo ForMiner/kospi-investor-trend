@@ -32,12 +32,30 @@ python3 fetch_kospi.py --months 14
 
 | 시각 (KST) | 주체 | 하는 일 |
 |---|---|---|
-| 평일 07:50 | GitHub Actions (`.github/workflows/fetch-kospi.yml`) | 네이버에서 새 영업일 수집 → CSV 커밋 |
-| 평일 08:00 | Claude 클라우드 루틴 | 저장소 클론 → `--render-only` 렌더 → 아티팩트 갱신 → 푸시 알림 |
+| 평일 07:50 | GitHub Actions (`.github/workflows/fetch-kospi.yml`) | 네이버에서 새 영업일 수집 → CSV 커밋 → **텔레그램 알림** |
+| 평일 08:00 | Claude 클라우드 루틴 | 저장소 클론 → `--render-only` 렌더 → 아티팩트 갱신 |
 
 **왜 나눴나:** Claude 클라우드 샌드박스의 이그레스 프록시는 허용 목록 방식이라
-`finance.naver.com` 요청이 403으로 거부됩니다 (`WebFetch`도 동일). GitHub 러너는
-아웃바운드가 열려 있으므로 스크래핑을 그쪽에 두고, 루틴은 커밋된 CSV만 읽습니다.
+`finance.naver.com`도 `api.telegram.org`도 403으로 거부됩니다 (`WebFetch`도 동일).
+GitHub 러너는 아웃바운드가 열려 있으므로 **수집과 알림 둘 다** 그쪽에 두고, 루틴은
+커밋된 CSV를 읽어 렌더·발행만 합니다.
+
+알림 문구는 `fetch_kospi.py`가 출력하는 `NOTIFY ` 줄을 그대로 씁니다. 문구나 숫자
+형식을 바꾸려면 워크플로가 아니라 `notify_line()`을 고치세요.
+
+알림에 붙는 아티팩트 링크는 루틴이 갱신하기 10분 전에 발송되므로, 알림 직후에 열면
+전날 차트가 보일 수 있습니다. 메시지의 숫자 자체는 항상 당일 확정치입니다.
+
+### 필요한 저장소 시크릿
+
+Settings → Secrets and variables → Actions:
+
+| 이름 | 값 |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | @BotFather가 발급한 봇 토큰 |
+| `TELEGRAM_CHAT_ID` | 봇과의 대화 chat id |
+
+둘 중 하나라도 없으면 알림 단계는 조용히 건너뜁니다 — 수집과 커밋은 그대로 됩니다.
 
 Actions 워크플로는 `workflow_dispatch` 로 수동 실행할 수 있습니다.
 

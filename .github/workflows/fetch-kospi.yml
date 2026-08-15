@@ -1,9 +1,10 @@
 name: Fetch KOSPI investor data
 
-# The Claude cloud routine that renders this report runs in a sandbox whose egress
-# proxy only allows an allowlist (pypi, npm, anthropic.com); finance.naver.com is
-# refused with 403. GitHub-hosted runners have open outbound internet, so the
-# scraping lives here and the routine only reads the committed CSV.
+# This workflow does the two things the Claude cloud routine cannot: it reaches
+# finance.naver.com, and it reaches api.telegram.org. The routine's sandbox sits
+# behind an allowlist egress proxy that refuses both with 403, so scraping and
+# notifying both live here; the routine only renders the committed CSV and
+# republishes the artifact.
 
 on:
   schedule:
@@ -29,7 +30,9 @@ jobs:
           python-version: "3.12"
 
       - name: Fetch latest trading days
-        run: python3 fetch_kospi.py --months 14
+        run: |
+          set -o pipefail
+          python3 fetch_kospi.py --months 14 2>&1 | tee /tmp/fetch.log
 
       - name: Commit CSV if it changed
         run: |
@@ -43,3 +46,37 @@ jobs:
           git add data/kospi_investor_daily.csv
           git commit -m "Update KOSPI investor data through ${latest}"
           git push
+
+      # The message text is built by fetch_kospi.py (the NOTIFY line) so the
+      # Korean wording and number formatting live in one place.
+      - name: Notify via Telegram
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ARTIFACT_URL: https://claude.ai/code/artifact/8b267dfc-73b4-4100-9cb6-66661250a454
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set — skipping notification."
+            exit 0
+          fi
+
+          line=$(grep '^NOTIFY ' /tmp/fetch.log | tail -n 1 | cut -d' ' -f2-)
+          if [ -z "$line" ]; then
+            echo "No NOTIFY line in the fetch output; nothing to send."
+            exit 1
+          fi
+
+          curl -sS -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${line}"$'\n'"${ARTIFACT_URL}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            -o /tmp/telegram.json
+
+          # Telegram answers 200 with {"ok":false,...} on bad token/chat_id,
+          # so the status code alone is not enough to call this a success.
+          if ! grep -q '"ok":true' /tmp/telegram.json; then
+            echo "Telegram rejected the message:"
+            cat /tmp/telegram.json
+            exit 1
+          fi
+          echo "Sent: ${line}"
