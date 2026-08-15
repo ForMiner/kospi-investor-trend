@@ -55,7 +55,9 @@ Settings → Secrets and variables → Actions:
 | `TELEGRAM_BOT_TOKEN` | @BotFather가 발급한 봇 토큰 |
 | `TELEGRAM_CHAT_ID` | 봇과의 대화 chat id |
 
-둘 중 하나라도 없으면 알림 단계는 조용히 건너뜁니다 — 수집과 커밋은 그대로 됩니다.
+둘 중 하나라도 없으면 알림 단계는 **실패합니다**. 일부러 그렇게 뒀습니다 — 조용히
+건너뛰면 "보냈는데 안 온 것"과 "애초에 안 보낸 것"이 실행 목록에서 똑같이 초록색으로
+보여서 구분할 수 없습니다. 수집과 커밋은 그 앞 단계라 알림이 실패해도 이미 끝나 있습니다.
 
 Actions 워크플로는 `workflow_dispatch` 로 수동 실행할 수 있습니다.
 

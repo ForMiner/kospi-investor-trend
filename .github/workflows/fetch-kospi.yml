@@ -55,9 +55,13 @@ jobs:
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ARTIFACT_URL: https://claude.ai/code/artifact/8b267dfc-73b4-4100-9cb6-66661250a454
         run: |
+          # Fail rather than skip: a silently-skipped notification is
+          # indistinguishable from a delivered one on the runs page.
+          echo "TELEGRAM_BOT_TOKEN present: $([ -n "$TOKEN" ] && echo yes || echo NO)"
+          echo "TELEGRAM_CHAT_ID present:   $([ -n "$CHAT_ID" ] && echo yes || echo NO)"
           if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set — skipping notification."
-            exit 0
+            echo "::error::Telegram secrets are missing on this repository."
+            exit 1
           fi
 
           line=$(grep '^NOTIFY ' /tmp/fetch.log | tail -n 1 | cut -d' ' -f2-)
