@@ -1,0 +1,3 @@
+# Both drivers write this file — PowerShell with CRLF, Python on Linux with LF.
+# Pin it to LF so a run from the other platform doesn't rewrite all 290 rows.
+data/kospi_investor_daily.csv text eol=lf
