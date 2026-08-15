@@ -94,7 +94,6 @@ jobs:
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ARTIFACT_URL: https://claude.ai/code/artifact/8b267dfc-73b4-4100-9cb6-66661250a454
         run: |
           # Fail rather than skip: a silently-skipped notification is
           # indistinguishable from a delivered one on the runs page.
@@ -114,7 +113,7 @@ jobs:
           curl -sS -X POST "https://api.telegram.org/bot${TOKEN}/sendPhoto" \
             -F "chat_id=${CHAT_ID}" \
             -F "photo=@/tmp/kospi.png" \
-            -F "caption=${line}"$'\n'"${ARTIFACT_URL}" \
+            -F "caption=${line}" \
             -o /tmp/telegram.json
 
           # Telegram answers 200 with {"ok":false,...} on a bad token or chat_id,
