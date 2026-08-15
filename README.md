@@ -24,6 +24,22 @@ python3 fetch_kospi.py --months 14
 ```
 
 `--force` / `-Force` 를 주면 캐시를 무시하고 창 전체를 다시 받습니다.
+`--render-only` 는 네트워크를 전혀 쓰지 않고 커밋된 CSV만으로 리포트를 다시 만듭니다.
+
+## 자동화 구조
+
+수집과 발행이 두 곳으로 나뉘어 있습니다.
+
+| 시각 (KST) | 주체 | 하는 일 |
+|---|---|---|
+| 평일 07:50 | GitHub Actions (`.github/workflows/fetch-kospi.yml`) | 네이버에서 새 영업일 수집 → CSV 커밋 |
+| 평일 08:00 | Claude 클라우드 루틴 | 저장소 클론 → `--render-only` 렌더 → 아티팩트 갱신 → 푸시 알림 |
+
+**왜 나눴나:** Claude 클라우드 샌드박스의 이그레스 프록시는 허용 목록 방식이라
+`finance.naver.com` 요청이 403으로 거부됩니다 (`WebFetch`도 동일). GitHub 러너는
+아웃바운드가 열려 있으므로 스크래핑을 그쪽에 두고, 루틴은 커밋된 CSV만 읽습니다.
+
+Actions 워크플로는 `workflow_dispatch` 로 수동 실행할 수 있습니다.
 
 ## 데이터
 

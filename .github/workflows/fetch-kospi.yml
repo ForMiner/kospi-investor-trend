@@ -1,0 +1,45 @@
+name: Fetch KOSPI investor data
+
+# The Claude cloud routine that renders this report runs in a sandbox whose egress
+# proxy only allows an allowlist (pypi, npm, anthropic.com); finance.naver.com is
+# refused with 403. GitHub-hosted runners have open outbound internet, so the
+# scraping lives here and the routine only reads the committed CSV.
+
+on:
+  schedule:
+    # 22:50 UTC Sun-Thu = 07:50 KST Mon-Fri, ten minutes before the routine runs.
+    - cron: "50 22 * * 0-4"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-kospi
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch latest trading days
+        run: python3 fetch_kospi.py --months 14
+
+      - name: Commit CSV if it changed
+        run: |
+          if git diff --quiet -- data/kospi_investor_daily.csv; then
+            echo "No new trading days; nothing to commit."
+            exit 0
+          fi
+          latest=$(tail -n 1 data/kospi_investor_daily.csv | cut -d, -f1 | tr -d '"')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/kospi_investor_daily.csv
+          git commit -m "Update KOSPI investor data through ${latest}"
+          git push

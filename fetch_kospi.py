@@ -87,7 +87,9 @@ def months_back(d, n):
 def load_cache():
     by_date = {}
     if os.path.exists(CSV_PATH):
-        with open(CSV_PATH, newline="", encoding="utf-8") as f:
+        # utf-8-sig, not utf-8: PowerShell's Export-Csv writes a BOM, which would
+        # otherwise turn the first header into "﻿date" and lose the column.
+        with open(CSV_PATH, newline="", encoding="utf-8-sig") as f:
             for r in csv.DictReader(f):
                 for c in COLUMNS[1:]:
                     r[c] = int(r[c])
@@ -95,11 +97,40 @@ def load_cache():
     return by_date
 
 
+def render(all_rows, target_start):
+    """Write dist/index.html from rows already in hand. Never touches the network."""
+    window = [r for r in all_rows if r["date"] >= target_start]
+    if not window:
+        print("ERROR: no rows on or after %s." % target_start, file=sys.stderr)
+        return 1
+
+    payload = {
+        "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "latestDate": window[-1]["date"],
+        "rows": [{c: r[c] for c in COLUMNS} for r in window],
+    }
+    with open(TEMPLATE, encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("/*__DATA__*/null",
+                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    with open(OUT_HTML, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print("Wrote %s" % OUT_HTML)
+    latest = all_rows[-1]
+    print("LATEST %s individual=%d foreign=%d institution=%d"
+          % (latest["date"], latest["individual"], latest["foreign"], latest["institution"]))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", type=int, default=14)
     ap.add_argument("--force", action="store_true",
                     help="ignore the early-stop and re-fetch the whole window")
+    ap.add_argument("--render-only", action="store_true",
+                    help="rebuild the report from the cached CSV without touching the "
+                         "network (for environments whose egress cannot reach Naver)")
     args = ap.parse_args()
 
     for d in (os.path.dirname(CSV_PATH), os.path.dirname(OUT_HTML)):
@@ -111,6 +142,15 @@ def main():
 
     today = date.today()
     target_start = months_back(today, args.months).isoformat()
+
+    if args.render_only:
+        if not by_date:
+            print("ERROR: --render-only needs %s, which is missing or empty."
+                  % CSV_PATH, file=sys.stderr)
+            return 1
+        print("Render-only: %d cached rows, no network." % len(by_date))
+        return render([by_date[k] for k in sorted(by_date)], target_start)
+
     # Keys come from the CSV oldest-first, so the first one starts cached history.
     cache_covers = bool(by_date) and min(by_date) <= target_start
 
@@ -164,25 +204,7 @@ def main():
     print("Fetched %d page(s), %d new row(s). Total %d rows (%s .. %s)."
           % (fetched, added, len(all_rows), all_rows[0]["date"], all_rows[-1]["date"]))
 
-    window = [r for r in all_rows if r["date"] >= target_start]
-    payload = {
-        "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "latestDate": window[-1]["date"],
-        "rows": [{c: r[c] for c in COLUMNS} for r in window],
-    }
-
-    with open(TEMPLATE, encoding="utf-8") as f:
-        html = f.read()
-    html = html.replace("/*__DATA__*/null",
-                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-    with open(OUT_HTML, "w", encoding="utf-8") as f:
-        f.write(html)
-
-    print("Wrote %s" % OUT_HTML)
-    latest = all_rows[-1]
-    print("LATEST %s individual=%d foreign=%d institution=%d"
-          % (latest["date"], latest["individual"], latest["foreign"], latest["institution"]))
-    return 0
+    return render(all_rows, target_start)
 
 
 if __name__ == "__main__":
