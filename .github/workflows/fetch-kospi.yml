@@ -1,10 +1,10 @@
 name: Fetch KOSPI investor data
 
-# This workflow does the two things the Claude cloud routine cannot: it reaches
-# finance.naver.com, and it reaches api.telegram.org. The routine's sandbox sits
-# behind an allowlist egress proxy that refuses both with 403, so scraping and
-# notifying both live here; the routine only renders the committed CSV and
-# republishes the artifact.
+# This workflow does the three things the Claude cloud routine cannot: it reaches
+# finance.naver.com, it reaches api.telegram.org, and it has a browser to render
+# the report with. The routine's sandbox sits behind an allowlist egress proxy
+# that refuses the first two with 403, so scraping and notifying both live here;
+# the routine only renders the committed CSV and republishes the artifact.
 
 on:
   schedule:
@@ -47,9 +47,40 @@ jobs:
           git commit -m "Update KOSPI investor data through ${latest}"
           git push
 
-      # The message text is built by fetch_kospi.py (the NOTIFY line) so the
-      # Korean wording and number formatting live in one place.
-      - name: Notify via Telegram
+      # Screenshot the very page the artifact serves, so the image in Telegram and
+      # the page on claude.ai can never drift apart.
+      - name: Render the report to PNG
+        run: |
+          for bin in google-chrome google-chrome-stable chromium-browser chromium; do
+            if command -v "$bin" >/dev/null 2>&1; then CHROME="$bin"; break; fi
+          done
+          if [ -z "${CHROME:-}" ]; then
+            echo "::error::No Chrome or Chromium on this runner."
+            exit 1
+          fi
+          echo "Using $CHROME"
+
+          # virtual-time-budget lets the chart JS finish before the shot is taken;
+          # device-scale-factor 2 keeps 11px axis labels readable after Telegram
+          # re-encodes the image. The height must clear the whole document —
+          # measured at 1815px for a 1000px-wide viewport — or the last chart
+          # is silently cut off.
+          "$CHROME" --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+            --virtual-time-budget=15000 \
+            --force-device-scale-factor=2 \
+            --window-size=1000,1840 \
+            --screenshot=/tmp/kospi.png \
+            "file://$PWD/dist/index.html"
+
+          if [ ! -s /tmp/kospi.png ]; then
+            echo "::error::Screenshot came out empty."
+            exit 1
+          fi
+          ls -lh /tmp/kospi.png
+
+      # The caption text is built by fetch_kospi.py (the NOTIFY line) so the Korean
+      # wording and number formatting live in one place.
+      - name: Send the chart to Telegram
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -66,20 +97,20 @@ jobs:
 
           line=$(grep '^NOTIFY ' /tmp/fetch.log | tail -n 1 | cut -d' ' -f2-)
           if [ -z "$line" ]; then
-            echo "No NOTIFY line in the fetch output; nothing to send."
+            echo "::error::No NOTIFY line in the fetch output."
             exit 1
           fi
 
-          curl -sS -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${CHAT_ID}" \
-            --data-urlencode "text=${line}"$'\n'"${ARTIFACT_URL}" \
-            --data-urlencode "disable_web_page_preview=true" \
+          curl -sS -X POST "https://api.telegram.org/bot${TOKEN}/sendPhoto" \
+            -F "chat_id=${CHAT_ID}" \
+            -F "photo=@/tmp/kospi.png" \
+            -F "caption=${line}"$'\n'"${ARTIFACT_URL}" \
             -o /tmp/telegram.json
 
-          # Telegram answers 200 with {"ok":false,...} on bad token/chat_id,
+          # Telegram answers 200 with {"ok":false,...} on a bad token or chat_id,
           # so the status code alone is not enough to call this a success.
           if ! grep -q '"ok":true' /tmp/telegram.json; then
-            echo "Telegram rejected the message:"
+            echo "::error::Telegram rejected the message."
             cat /tmp/telegram.json
             exit 1
           fi
