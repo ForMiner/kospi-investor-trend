@@ -198,7 +198,9 @@ def main():
 
     all_rows = [by_date[k] for k in sorted(by_date)]
     with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=COLUMNS)
+        # csv defaults to \r\n on every platform; .gitattributes pins this file to
+        # LF, so without this the file reads as modified right after every run.
+        w = csv.DictWriter(f, fieldnames=COLUMNS, lineterminator="\n")
         w.writeheader()
         w.writerows(all_rows)
     print("Fetched %d page(s), %d new row(s). Total %d rows (%s .. %s)."
