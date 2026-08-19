@@ -1,0 +1,738 @@
+<title>그리드 매매 관제</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --plane:    #0a1714;
+    --surface:  #0f201c;
+    --surface2: #132724;
+    --ink:      #e9f4f0;
+    --ink-2:    #a9c4bc;
+    --muted:    #6f8a83;
+    --line:     rgba(255, 255, 255, 0.07);
+    --line-2:   rgba(255, 255, 255, 0.14);
+    --teal:     #4ad6b0;
+    --teal-dim: #2d8570;
+    --purple:   #9a8cf0;
+    --red:      #ff6b81;
+    --green:    #3fd99b;
+    --amber:    #e8c05a;
+    --focus:    #4ad6b0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--plane);
+    color: var(--ink);
+    /* Named Hangul faces on purpose: a headless Linux screenshot renders every
+       Korean glyph as tofu without one of these. */
+    font-family: "Pretendard", "Pretendard Variable", system-ui, -apple-system,
+                 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR",
+                 "Noto Sans CJK KR", "NanumGothic", "Nanum Gothic", sans-serif;
+    font-size: 15px; line-height: 1.55; margin: 0; padding: 28px 18px 72px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---- page header ---- */
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 22px; }
+  .top h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin: 0; }
+  .top .code { font-size: 13px; color: var(--muted); margin-left: 8px; font-weight: 500; }
+  .spacer { flex: 1 1 auto; }
+  .quote { text-align: right; font-variant-numeric: tabular-nums; }
+  .quote .p { font-size: 26px; font-weight: 660; letter-spacing: -0.02em; }
+  .quote .d { font-size: 13px; color: var(--muted); }
+  .up { color: var(--red); } .down { color: #6aa9ff; }
+
+  .stripe {
+    display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+    font-size: 13px; color: var(--ink-2);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px;
+    border: 1px solid var(--line-2); border-radius: 999px; font-size: 12.5px;
+    background: var(--surface); font-variant-numeric: tabular-nums;
+  }
+  .pill b { font-weight: 640; }
+  .pill.buy  { border-color: rgba(63, 217, 155, 0.45); color: var(--green); }
+  .pill.sell { border-color: rgba(255, 107, 129, 0.45); color: var(--red); }
+  .pill.warn { border-color: rgba(232, 192, 90, 0.5); color: var(--amber); }
+
+  /* ---- cards ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .badge {
+    font-size: 11.5px; font-weight: 640; padding: 3px 9px; border-radius: 7px;
+    background: rgba(74, 214, 176, 0.14); color: var(--teal); letter-spacing: 0.01em;
+  }
+  .badge.gold { background: rgba(232, 192, 90, 0.15); color: var(--amber); }
+  .badge.grey { background: rgba(255, 255, 255, 0.07); color: var(--ink-2); }
+  .card-title { font-size: 16px; font-weight: 620; margin: 0; letter-spacing: -0.01em; }
+  .card-sub { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  /* ---- stat tiles ---- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .tile {
+    background: var(--surface2); border: 1px solid var(--line); border-radius: 11px;
+    padding: 13px 15px; display: flex; flex-direction: column; gap: 3px;
+  }
+  .tile-label { font-size: 12px; color: var(--muted); }
+  .tile-value { font-size: 21px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .tile-value.sm { font-size: 17px; }
+  .tile-value.pos { color: var(--green); }
+
+  /* ---- range chart ---- */
+  .range-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12.5px; }
+  .range-head .t { font-weight: 620; margin-right: 4px; }
+  .legend { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; }
+  .plot svg { display: block; width: 100%; height: auto; }
+
+  /* ---- toolbar ---- */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  button, select, input {
+    font: inherit; color: var(--ink); background: var(--surface2);
+    border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 11px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--teal-dim); }
+  button.accent { background: rgba(74, 214, 176, 0.14); border-color: rgba(74, 214, 176, 0.4); color: var(--teal); font-weight: 620; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  /* ---- ladder table ---- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 1000px; font-variant-numeric: tabular-nums; }
+  thead th {
+    font-size: 12px; font-weight: 600; color: var(--muted); text-align: right;
+    padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--surface2);
+    white-space: nowrap; position: sticky; top: 0;
+  }
+  thead th small { display: block; font-weight: 400; font-size: 10.5px; opacity: 0.8; }
+  thead th.l { text-align: left; }
+  tbody td { padding: 9px 14px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13.5px; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.above { background: linear-gradient(90deg, rgba(255,107,129,0.07), transparent 55%); }
+  tbody tr.below { background: linear-gradient(90deg, rgba(63,217,155,0.06), transparent 55%); }
+  tbody tr.held  td.mark { color: var(--purple); }
+  /* The rail column has no text of its own, so it collapses unless pinned. */
+  thead th:first-child, td.spine { width: 96px; min-width: 96px; }
+  td.spine { text-align: left; position: relative; }
+  td.spine .rail { position: absolute; left: 46px; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.22); }
+  td.spine .dot {
+    position: absolute; left: 42px; top: 50%; transform: translateY(-50%);
+    width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--muted); background: var(--plane);
+  }
+  td.spine .tag { position: absolute; left: 0; width: 38px; text-align: right; top: 50%;
+                  transform: translateY(-50%); font-size: 11.5px; font-weight: 640; white-space: nowrap; }
+  td.lv { text-align: left; font-weight: 640; font-size: 13.5px; white-space: nowrap; }
+  td.lv .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
+  tr.above td.lv { color: var(--red); } tr.above td.lv .d { background: var(--red); }
+  tr.below td.lv { color: var(--green); } tr.below td.lv .d { background: var(--green); }
+  tr.at td.lv { color: var(--ink); } tr.at td.lv .d { background: var(--ink); }
+  td.fill input { width: 74px; text-align: center; padding: 5px 6px; border-radius: 8px; }
+  td.profit { color: var(--green); font-weight: 620; white-space: nowrap; }
+  td.profit .sub { color: var(--muted); font-weight: 400; font-size: 11.5px; margin-left: 6px; }
+  td.mark { font-size: 12.5px; white-space: nowrap; }
+  td.mark .to { color: var(--muted); }
+  tr.above td.mark b { color: var(--red); } tr.below td.mark b { color: var(--green); }
+  tr.sep td {
+    padding: 5px 14px; font-size: 11.5px; color: var(--muted); text-align: left;
+    border-bottom: 1px dashed var(--line-2); background: rgba(255,255,255,0.015);
+  }
+  tr.sep.now td { color: var(--ink); border-bottom: 1px dashed var(--teal); }
+  tr.sep b { font-variant-numeric: tabular-nums; }
+
+  /* ---- journal ---- */
+  .day { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+  .day + .day { margin-top: 8px; }
+  .day-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; cursor: pointer;
+    padding: 11px 14px; background: var(--surface2); font-size: 13.5px; font-variant-numeric: tabular-nums;
+  }
+  .day-head .d { font-weight: 660; }
+  .day-head .c { color: var(--muted); font-size: 12.5px; }
+  .day-head .r { margin-left: auto; font-weight: 640; color: var(--green); }
+  .day-head .caret { color: var(--muted); font-size: 11px; }
+  .fills { list-style: none; margin: 0; padding: 4px 0; }
+  .fills li {
+    display: flex; align-items: center; gap: 10px; padding: 6px 14px;
+    font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .fills .t { color: var(--muted); width: 44px; flex: none; }
+  .fills .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .fills .who { font-weight: 620; }
+  .fills .px { color: var(--ink-2); }
+  .fills .v { margin-left: auto; }
+  .fills .v.pos { color: var(--green); font-weight: 620; }
+  .fills .v.qty { color: var(--ink-2); }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+
+  /* ---- settings ---- */
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+  .field input[type="text"] { text-align: left; }
+  details > summary { cursor: pointer; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding-top: 4px; }
+  code { background: var(--surface2); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  @media (max-width: 640px) {
+    body { padding: 18px 12px 56px; }
+    .top h1 { font-size: 21px; } .quote .p { font-size: 21px; }
+  }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1 id="name">—<span class="code" id="code"></span></h1>
+      <div class="card-sub" id="gridline">—</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="quote">
+      <div class="p" id="price">—</div>
+      <div class="d" id="pricemeta">시세 대기</div>
+    </div>
+  </div>
+
+  <div class="stripe" id="stripe"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="badge">분배표</span>
+      <h2 class="card-title">가격별 투자 분배표</h2>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><div class="tile-label">그리드 간격</div><div class="tile-value sm" id="t-step">—</div></div>
+      <div class="tile"><div class="tile-label">레벨당 투자금</div><div class="tile-value sm" id="t-per">—</div></div>
+      <div class="tile"><div class="tile-label">총 매수 가능 수량</div><div class="tile-value sm" id="t-qty">—</div></div>
+      <div class="tile"><div class="tile-label">평균 매수가</div><div class="tile-value sm" id="t-avg">—</div></div>
+    </div>
+
+    <div class="range-head">
+      <span class="t">Price Range</span>
+      <span class="legend"><span class="swatch" style="background:var(--teal)"></span>매수 대기 (현금)</span>
+      <span class="legend"><span class="swatch" style="background:var(--purple)"></span>보유·매도 대기</span>
+      <span class="spacer"></span>
+      <span class="hint" id="range-note"></span>
+    </div>
+    <div class="plot" id="range"></div>
+
+    <div class="bar">
+      <button class="accent" id="autofill">⚡ 실매수 자동입력</button>
+      <select id="filter">
+        <option value="all">전 레벨</option>
+        <option value="buy">매수 대기만</option>
+        <option value="held">보유만</option>
+        <option value="near">현재가 ±5칸</option>
+      </select>
+      <span class="hint">권장 수량(정수)을 실매수 칸에 채웁니다</span>
+      <span class="spacer"></span>
+      <button id="clearfill">비우기</button>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="l" style="width:96px"></th>
+            <th class="l">레벨</th>
+            <th>가격 (₩)</th>
+            <th>주문금액 (₩)</th>
+            <th>수량 (주)</th>
+            <th>실매수 (주)<small>증권사 실제 체결 · 정수</small></th>
+            <th>다음 그리드 매도 수익 (₩)<small id="feenote">실매수 기준</small></th>
+            <th>비고</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="badge gold">거래일지</span>
+      <h2 class="card-title">그리드 체결 기록</h2>
+      <span class="spacer"></span>
+      <span class="card-sub" id="j-span">—</span>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="tile-label">실현 수익 총합 (기록 전체)</div><div class="tile-value sm" id="j-sum">—</div></div>
+      <div class="tile"><div class="tile-label">수익률 (원금 대비)</div><div class="tile-value sm" id="j-ret">—</div></div>
+      <div class="tile"><div class="tile-label">APR (실체결 연환산)</div><div class="tile-value sm" id="j-apr">—</div></div>
+      <div class="tile"><div class="tile-label">그리드 누적 가동 시간</div><div class="tile-value sm" id="j-run">—</div></div>
+    </div>
+    <div id="journal"></div>
+  </section>
+
+  <section class="card">
+    <details id="setbox">
+      <summary class="card-head">
+        <span class="badge grey">설정</span>
+        <h2 class="card-title">그리드 설정</h2>
+        <span class="spacer"></span>
+        <span class="card-sub" id="setstate">펼치기</span>
+      </summary>
+      <div style="height:14px"></div>
+      <div class="form" id="form">
+        <div class="field"><label for="f-code">종목코드</label><input type="text" id="f-code" placeholder="005930"></div>
+        <div class="field"><label for="f-name">종목명</label><input type="text" id="f-name"></div>
+        <div class="field"><label for="f-lower">하단가 (₩)</label><input type="number" id="f-lower" step="1"></div>
+        <div class="field"><label for="f-upper">상단가 (₩)</label><input type="number" id="f-upper" step="1"></div>
+        <div class="field"><label for="f-levels">레벨 수</label><input type="number" id="f-levels" min="2" max="120" step="1"></div>
+        <div class="field"><label for="f-budget">총 투자금 (₩)</label><input type="number" id="f-budget" step="1"></div>
+        <div class="field"><label for="f-mult">끝단 배수 (하단 집중)</label><input type="number" id="f-mult" min="1" step="0.1"></div>
+        <div class="field"><label for="f-entry">진입가 (₩)</label><input type="number" id="f-entry" step="1"></div>
+        <div class="field"><label for="f-fee">수수료율 (%)</label><input type="number" id="f-fee" min="0" step="0.001"></div>
+        <div class="field"><label for="f-tax">매도 세율 (%)</label><input type="number" id="f-tax" min="0" step="0.001"></div>
+      </div>
+      <div style="height:12px"></div>
+      <div class="bar">
+        <button id="copycfg">설정 JSON 복사</button>
+        <button id="resetcfg">저장된 설정으로 되돌리기</button>
+        <span class="hint">복사한 JSON을 <code>grid/config.json</code> 에 넣고 커밋하면 알림 봇이 같은 사다리를 봅니다</span>
+      </div>
+    </details>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+"use strict";
+var PAYLOAD = /*__DATA__*/null;
+
+var DEFAULTS = {
+  code: "", name: "종목 미설정", lower: 1351000, upper: 1800000, levels: 19,
+  budget: 633333333, endMultiple: 20, tick: 0, feeRate: 0, taxRate: 0,
+  entryPrice: 1800000, holdings: {}, sessions: []
+};
+var LS_CFG = "grid.cfg.v1", LS_FILL = "grid.fill.v1";
+
+/* ---------------------------------------------------------------- ladder math
+   Mirror of build_levels() in grid_bot.py. Change one, change the other — the
+   bot's alerts and this table have to name the same prices. */
+function tickSize(p) {
+  if (p < 2000) return 1;
+  if (p < 5000) return 5;
+  if (p < 20000) return 10;
+  if (p < 50000) return 50;
+  if (p < 200000) return 100;
+  if (p < 500000) return 500;
+  return 1000;
+}
+function snap(p, tick) { var t = tick || tickSize(p); return Math.floor(p / t) * t; }
+
+function buildLevels(cfg) {
+  var n = Math.max(2, Math.round(cfg.levels));
+  var ratio = Math.pow(cfg.upper / cfg.lower, 1 / (n - 1));
+  var w = [], total = 0, k;
+  for (k = 0; k < n; k++) { w[k] = Math.pow(cfg.endMultiple, (n - 1 - k) / (n - 1)); total += w[k]; }
+  var out = [];
+  for (k = 0; k < n; k++) {
+    var price = snap(cfg.upper / Math.pow(ratio, n - 1 - k), cfg.tick);
+    var amount = cfg.budget * w[k] / total;
+    var target = k === n - 1 ? snap(cfg.upper * ratio, cfg.tick)
+                             : snap(cfg.upper / Math.pow(ratio, n - 2 - k), cfg.tick);
+    out.push({
+      level: k + 1, price: price, amount: amount, shares: amount / price,
+      plan: Math.floor(amount / price), target: target,
+      held: Number((cfg.holdings || {})[k + 1] || 0)
+    });
+  }
+  return { levels: out, ratio: ratio };
+}
+function netProfit(cfg, shares, buy, sell) {
+  var fee = (cfg.feeRate || 0) / 100, tax = (cfg.taxRate || 0) / 100;
+  return shares * sell * (1 - fee - tax) - shares * buy * (1 + fee);
+}
+
+/* ------------------------------------------------------------------ format */
+function won(v) { return "₩" + Math.round(v).toLocaleString("ko-KR"); }
+function signedWon(v) { return (v >= 0 ? "+" : "-") + won(Math.abs(v)); }
+function num(v, d) { return Number(v).toFixed(d === undefined ? 4 : d); }
+function pct(v, d) { return (v >= 0 ? "+" : "") + v.toFixed(d === undefined ? 2 : d) + "%"; }
+
+/* -------------------------------------------------------------------- state */
+function readCfg() {
+  var base = Object.assign({}, DEFAULTS, (PAYLOAD && PAYLOAD.config) || {});
+  try {
+    var raw = JSON.parse(localStorage.getItem(LS_CFG) || "null");
+    // Local edits are pinned to the config they were forked from: once the
+    // committed config moves, the stale local copy is dropped rather than
+    // silently shadowing what the bot is actually watching.
+    if (raw && raw._base === JSON.stringify(base)) { return { cfg: Object.assign({}, base, raw.cfg), local: true, base: base }; }
+  } catch (e) { /* ignore a corrupt entry */ }
+  return { cfg: base, local: false, base: base };
+}
+function writeCfg(cfg, base) {
+  var slim = {};
+  ["code","name","lower","upper","levels","budget","endMultiple","tick","feeRate","taxRate","entryPrice"]
+    .forEach(function (k) { slim[k] = cfg[k]; });
+  localStorage.setItem(LS_CFG, JSON.stringify({ _base: JSON.stringify(base), cfg: slim }));
+}
+function readFills() { try { return JSON.parse(localStorage.getItem(LS_FILL) || "{}") || {}; } catch (e) { return {}; } }
+function writeFills(f) { localStorage.setItem(LS_FILL, JSON.stringify(f)); }
+
+var S = readCfg();
+var cfg = S.cfg, BASE = S.base, fills = readFills();
+var quote = (PAYLOAD && PAYLOAD.quote) || null;
+var trades = (PAYLOAD && PAYLOAD.trades) || [];
+
+function fillOf(lv) {
+  var v = fills[lv.level];
+  if (v !== undefined && v !== null && v !== "") return Math.max(0, Math.floor(Number(v) || 0));
+  if (lv.held > 0) return lv.held;              // 봇이 기록한 실제 보유가 우선
+  return fills.__auto === false ? 0 : lv.plan;  // 비우기 전까지는 권장 수량을 미리 채움
+}
+
+/* ---------------------------------------------------------------- rendering */
+function render() {
+  var built = buildLevels(cfg), levels = built.levels, ratio = built.ratio;
+  var cur = quote && quote.price ? quote.price : cfg.entryPrice;
+  var stepPct = (ratio - 1) * 100;
+  var totalQty = 0, i;
+  for (i = 0; i < levels.length; i++) totalQty += levels[i].shares;
+
+  /* header */
+  document.getElementById("name").firstChild.nodeValue = cfg.name || "종목 미설정";
+  document.getElementById("code").textContent = cfg.code ? cfg.code : "종목코드 미설정";
+  document.getElementById("gridline").textContent =
+    won(cfg.lower) + " ~ " + won(cfg.upper) + " · " + levels.length + "레벨 · 원금 " + won(cfg.budget);
+
+  var pEl = document.getElementById("price"), mEl = document.getElementById("pricemeta");
+  if (quote && quote.price) {
+    pEl.textContent = won(quote.price);
+    pEl.className = "p " + (quote.change > 0 ? "up" : quote.change < 0 ? "down" : "");
+    mEl.textContent = (quote.change ? pct(quote.changeRate || 0) + " " : "") +
+      (quote.at ? quote.at + " 기준" : "") + (quote.source ? " · " + quote.source : "");
+  } else {
+    pEl.textContent = "—";
+    mEl.textContent = "시세 없음 — 진입가 " + won(cfg.entryPrice) + " 기준으로 그립니다";
+  }
+
+  /* next actions */
+  var nextBuy = null, nextSell = null;
+  for (i = 0; i < levels.length; i++) {
+    var lv = levels[i];
+    if (lv.held <= 0 && lv.price < cur && (!nextBuy || lv.price > nextBuy.price)) nextBuy = lv;
+    if (lv.held > 0 && lv.target > cur && (!nextSell || lv.target < nextSell.target)) nextSell = lv;
+  }
+  var stripe = document.getElementById("stripe");
+  stripe.innerHTML = "";
+  function pill(cls, html) { var s = document.createElement("span"); s.className = "pill " + cls; s.innerHTML = html; stripe.appendChild(s); }
+  if (nextBuy) pill("buy", "다음 매수 <b>#" + nextBuy.level + "</b> " + won(nextBuy.price) + " · " + nextBuy.plan + "주");
+  else pill("buy", "다음 매수 없음 (현재가 아래 대기 레벨 없음)");
+  if (nextSell) pill("sell", "다음 매도 <b>#" + nextSell.level + "</b> → " + won(nextSell.target) + " · " + nextSell.held + "주");
+  else pill("sell", "다음 매도 없음 (보유 레벨 없음)");
+  var heldShares = 0, heldCost = 0;
+  for (i = 0; i < levels.length; i++) { heldShares += levels[i].held; heldCost += levels[i].held * levels[i].price; }
+  if (heldShares) {
+    var avg = heldCost / heldShares;
+    pill("", "보유 <b>" + heldShares + "주</b> · 평단 " + won(avg) +
+             " · 평가 " + pct((cur - avg) / avg * 100));
+  } else pill("", "보유 없음 · 전량 현금");
+  if (!cfg.code) pill("warn", "종목코드가 없어 알림 봇이 멈춰 있습니다");
+  if (S.local) pill("warn", "로컬 수정본 — 커밋된 설정과 다릅니다");
+
+  /* tiles */
+  document.getElementById("t-step").textContent =
+    stepPct.toFixed(2) + "% (≈" + won(cfg.upper * (ratio - 1)) + ")";
+  document.getElementById("t-per").textContent =
+    won(levels[levels.length - 1].amount) + " ~ " + won(levels[0].amount);
+  document.getElementById("t-qty").textContent = num(totalQty) + " 주";
+  document.getElementById("t-avg").textContent = won(cfg.budget / totalQty);
+  document.getElementById("range-note").textContent =
+    "하단 집중 (내려올수록 ↑매수) · 끝단 " + Number(cfg.endMultiple).toFixed(1) + "배";
+  document.getElementById("feenote").textContent =
+    "실매수 기준 · " + (cfg.feeRate ? "수수료 " + cfg.feeRate + "%" : "수수료 0%") +
+    " · " + (cfg.taxRate ? "세금 " + cfg.taxRate + "%" : "세금 제외");
+
+  drawRange(levels, cur);
+  drawRows(levels, cur, cfg);
+  drawJournal(levels);
+
+  document.getElementById("foot").textContent =
+    (PAYLOAD && PAYLOAD.generatedAt ? "갱신 " + PAYLOAD.generatedAt + " · " : "") +
+    "실매수 칸과 설정 변경은 이 브라우저에만 저장됩니다";
+}
+
+/* ---- Price Range bars: one bar per level, height = 그 레벨의 주문금액 ---- */
+function drawRange(levels, cur) {
+  var W = 1080, H = 190, padL = 8, padR = 8, padT = 26, padB = 22;
+  var n = levels.length, slot = (W - padL - padR) / n, gap = Math.min(6, slot * 0.16);
+  var max = 0, i;
+  for (i = 0; i < n; i++) max = Math.max(max, levels[i].amount);
+
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="가격대별 투자금 분배">';
+  s += '<defs>' +
+       '<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#63e3c0"/><stop offset="1" stop-color="#2f9c81"/></linearGradient>' +
+       '<linearGradient id="gp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a99cf5"/><stop offset="1" stop-color="#6f61c4"/></linearGradient>' +
+       '</defs>';
+  for (i = 0; i < n; i++) {
+    var lv = levels[i];
+    var h = Math.max(3, (H - padT - padB) * lv.amount / max);
+    var x = padL + i * slot + gap / 2, w = slot - gap;
+    var y = H - padB - h;
+    s += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) +
+         '" height="' + h.toFixed(1) + '" rx="2" fill="' + (lv.held > 0 ? "url(#gp)" : "url(#gt)") + '">' +
+         '<title>#' + lv.level + " " + won(lv.price) + " · " + won(lv.amount) +
+         (lv.held > 0 ? " · 보유 " + lv.held + "주" : " · 매수 대기") + '</title></rect>';
+  }
+  /* current price marker, placed by log-position between 하단 and 상단 */
+  var lo = levels[0].price, hi = levels[n - 1].price;
+  var t = Math.log(Math.max(cur, 1) / lo) / Math.log(hi / lo);
+  t = Math.max(0, Math.min(1, t));
+  var cx = padL + (t * (n - 1) + 0.5) * slot;
+  s += '<line x1="' + cx.toFixed(1) + '" y1="' + (padT - 8) + '" x2="' + cx.toFixed(1) + '" y2="' + (H - padB) +
+       '" stroke="#e9f4f0" stroke-width="1.2" stroke-dasharray="4 4"/>';
+  var anchor = t > 0.82 ? "end" : "middle";
+  s += '<text x="' + cx.toFixed(1) + '" y="' + (padT - 12) + '" text-anchor="' + anchor +
+       '" fill="#e9f4f0" font-size="12" font-weight="600">현재 ' + won(cur) + '</text>';
+  s += '<text x="' + padL + '" y="' + (H - 5) + '" fill="#6f8a83" font-size="11">' + won(lo) + '</text>';
+  s += '<text x="' + (W / 2) + '" y="' + (H - 5) + '" text-anchor="middle" fill="#6f8a83" font-size="11">' +
+       won(levels[Math.floor(n / 2)].price) + '</text>';
+  s += '<text x="' + (W - padR) + '" y="' + (H - 5) + '" text-anchor="end" fill="#6f8a83" font-size="11">' + won(hi) + '</text>';
+  s += '</svg>';
+  document.getElementById("range").innerHTML = s;
+}
+
+/* ---- the ladder table, top level first ---- */
+function drawRows(levels, cur, cfg) {
+  var mode = document.getElementById("filter").value;
+  var tb = document.getElementById("rows");
+  tb.innerHTML = "";
+
+  var nextBuyPrice = null, nextSellPrice = null, i, lv;
+  for (i = 0; i < levels.length; i++) {
+    lv = levels[i];
+    if (lv.held <= 0 && lv.price < cur && (nextBuyPrice === null || lv.price > nextBuyPrice)) nextBuyPrice = lv.price;
+    if (lv.held > 0 && lv.target > cur && (nextSellPrice === null || lv.target < nextSellPrice)) nextSellPrice = lv.target;
+  }
+  var curIdx = 0;
+  for (i = 0; i < levels.length; i++) if (levels[i].price <= cur) curIdx = i;
+
+  function sep(cls, html) {
+    var tr = document.createElement("tr");
+    tr.className = "sep " + cls;
+    tr.innerHTML = '<td colspan="8">' + html + "</td>";
+    tb.appendChild(tr);
+  }
+
+  var order = levels.slice().reverse();
+  var shown = 0;
+  for (i = 0; i < order.length; i++) {
+    lv = order[i];
+    var idx = lv.level - 1;
+    if (mode === "buy" && lv.held > 0) continue;
+    if (mode === "held" && lv.held <= 0) continue;
+    if (mode === "near" && Math.abs(idx - curIdx) > 5) continue;
+
+    if (cfg.entryPrice && lv.price <= cfg.entryPrice &&
+        (i === 0 || order[i - 1].price > cfg.entryPrice) && mode === "all")
+      sep("", "진입가 <b>" + won(cfg.entryPrice) + "</b>");
+
+    var pos = lv.price > cur ? "above" : lv.price === cur ? "at" : "below";
+    var fill = fillOf(lv);
+    var gain = fill > 0 ? netProfit(cfg, fill, lv.price, lv.target) : 0;
+    var gainPct = fill > 0 ? gain / (fill * lv.price) * 100 : 0;
+
+    var tr = document.createElement("tr");
+    tr.className = pos + (lv.held > 0 ? " held" : "");
+    var tag = "", dotcol = "";
+    if (nextSellPrice !== null && lv.price === nextSellPrice) {
+      tag = '<span class="tag" style="color:var(--red)">매도</span>'; dotcol = "var(--red)";
+    } else if (nextBuyPrice !== null && lv.price === nextBuyPrice) {
+      tag = '<span class="tag" style="color:var(--green)">매수</span>'; dotcol = "var(--green)";
+    }
+
+    tr.innerHTML =
+      '<td class="spine"><span class="rail"></span><span class="dot"' +
+        (dotcol ? ' style="border-color:' + dotcol + ';background:' + dotcol + '"' : "") + "></span>" + tag + "</td>" +
+      '<td class="lv">#' + lv.level + '<span class="d"></span></td>' +
+      "<td>" + won(lv.price) + "</td>" +
+      "<td>" + won(lv.amount) + "</td>" +
+      "<td>" + num(lv.shares) + "</td>" +
+      '<td class="fill"><input type="number" min="0" step="1" data-level="' + lv.level +
+        '" value="' + (fill || "") + '" aria-label="#' + lv.level + ' 실매수 수량"></td>' +
+      '<td class="profit">' + (fill > 0
+          ? signedWon(gain) + " (" + pct(gainPct) + ")" + '<span class="sub">실매수 ' + fill + "주</span>"
+          : '<span class="sub">실매수 입력 시 계산</span>') + "</td>" +
+      '<td class="mark">' + (fill > 0
+          ? "<b>보유 " + fill + "주</b> <span class='to'>→ " + won(lv.target) + " 매도</span>"
+          : "<span class='to'>" + won(lv.price) + " 매수 대기</span>") + "</td>";
+    tb.appendChild(tr);
+    shown++;
+
+    var next = order[i + 1];
+    if (quote && quote.price && next && lv.price > cur && next.price <= cur && mode === "all")
+      sep("now", "현재가 <b>" + won(cur) + "</b>" + (quote.changeRate ? " · " + pct(quote.changeRate) : ""));
+  }
+  if (!shown) {
+    var tr2 = document.createElement("tr");
+    tr2.innerHTML = '<td colspan="8" class="empty" style="text-align:left">조건에 맞는 레벨이 없습니다.</td>';
+    tb.appendChild(tr2);
+  }
+}
+
+/* ---- 거래일지 ---- */
+function drawJournal(levels) {
+  var host = document.getElementById("journal");
+  host.innerHTML = "";
+  var sum = 0, i;
+  for (i = 0; i < trades.length; i++) sum += Number(trades[i].profit || 0);
+
+  var first = trades.length ? trades[0].ts : null;
+  var last = trades.length ? trades[trades.length - 1].ts : null;
+  var sessions = (cfg.sessions && cfg.sessions.length)
+    ? cfg.sessions
+    : (first ? [{ start: first, end: null }] : []);
+  var ms = 0;
+  for (i = 0; i < sessions.length; i++) {
+    var a = Date.parse(String(sessions[i].start).replace(" ", "T"));
+    var b = sessions[i].end ? Date.parse(String(sessions[i].end).replace(" ", "T")) : Date.now();
+    if (!isNaN(a) && !isNaN(b) && b > a) ms += b - a;
+  }
+  var days = ms / 86400000;
+  var ret = cfg.budget ? sum / cfg.budget * 100 : 0;
+
+  document.getElementById("j-sum").textContent = trades.length ? signedWon(sum) : "—";
+  document.getElementById("j-sum").className = "tile-value sm" + (sum > 0 ? " pos" : "");
+  document.getElementById("j-ret").textContent = trades.length ? pct(ret, 3) : "—";
+  document.getElementById("j-ret").className = "tile-value sm" + (sum > 0 ? " pos" : "");
+  document.getElementById("j-apr").textContent =
+    days >= 0.5 ? pct(ret * 365 / days, 1) : "기간 부족";
+  document.getElementById("j-apr").className = "tile-value sm" + (sum > 0 && days >= 0.5 ? " pos" : "");
+  document.getElementById("j-run").textContent = trades.length
+    ? Math.floor(days) + "일 " + Math.floor((days - Math.floor(days)) * 24) + "시간" +
+      " (" + sessions.length + "회)"
+    : "—";
+  document.getElementById("j-span").textContent = trades.length
+    ? first.slice(2, 10).replace(/-/g, ".") + "부터 · 체결 " + trades.length + "건"
+    : "아직 체결 기록이 없습니다";
+
+  if (!trades.length) {
+    host.innerHTML = '<div class="empty">알림 봇이 그리드 신호를 잡으면 여기에 하루씩 쌓입니다.</div>';
+    return;
+  }
+
+  var byDay = {}, order = [];
+  for (i = 0; i < trades.length; i++) {
+    var t = trades[i], d = String(t.ts).slice(0, 10);
+    if (!byDay[d]) { byDay[d] = []; order.push(d); }
+    byDay[d].push(t);
+  }
+  order.sort().reverse();
+
+  for (i = 0; i < order.length; i++) {
+    var day = order[i], rows = byDay[day].slice().reverse();
+    var buys = 0, sells = 0, profit = 0, j;
+    for (j = 0; j < rows.length; j++) {
+      if (rows[j].side === "buy") buys++; else sells++;
+      profit += Number(rows[j].profit || 0);
+    }
+    var box = document.createElement("details");
+    box.className = "day";
+    if (i < 2) box.open = true;
+    var head = document.createElement("summary");
+    head.className = "day-head";
+    head.innerHTML = '<span class="d">' + Number(day.slice(5, 7)) + "/" + Number(day.slice(8, 10)) + "</span>" +
+      '<span class="c">매수 ' + buys + " / 매도 " + sells + "</span>" +
+      '<span class="r">' + (profit ? "실현 " + signedWon(profit) : "실현 —") + "</span>" +
+      '<span class="caret">▼</span>';
+    box.appendChild(head);
+
+    var ul = document.createElement("ul");
+    ul.className = "fills";
+    for (j = 0; j < rows.length; j++) {
+      var r = rows[j], sell = r.side === "sell";
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="t">' + String(r.ts).slice(11, 16) + "</span>" +
+        '<span class="dot" style="background:' + (sell ? "var(--red)" : "var(--green)") + '"></span>' +
+        '<span class="who">#' + r.level + " " + (sell ? "매도" : "매수") + "</span>" +
+        '<span class="px">' + won(r.price) + "</span>" +
+        (sell ? '<span class="v pos">' + signedWon(Number(r.profit || 0)) + "</span>"
+              : '<span class="v qty">' + Number(r.shares).toFixed(2) + "주</span>");
+      ul.appendChild(li);
+    }
+    box.appendChild(ul);
+    host.appendChild(box);
+  }
+}
+
+/* ------------------------------------------------------------------- wiring */
+var FIELDS = {
+  "f-code": ["code", "text"], "f-name": ["name", "text"], "f-lower": ["lower", "int"],
+  "f-upper": ["upper", "int"], "f-levels": ["levels", "int"], "f-budget": ["budget", "int"],
+  "f-mult": ["endMultiple", "float"], "f-entry": ["entryPrice", "int"],
+  "f-fee": ["feeRate", "float"], "f-tax": ["taxRate", "float"]
+};
+function fillForm() {
+  Object.keys(FIELDS).forEach(function (id) { document.getElementById(id).value = cfg[FIELDS[id][0]]; });
+  document.getElementById("setstate").textContent = S.local ? "로컬 수정본" : "커밋된 설정";
+}
+Object.keys(FIELDS).forEach(function (id) {
+  document.getElementById(id).addEventListener("change", function () {
+    var spec = FIELDS[id], v = this.value;
+    if (spec[1] === "int") v = Math.round(Number(v) || 0);
+    else if (spec[1] === "float") v = Number(v) || 0;
+    cfg[spec[0]] = v;
+    if (cfg.upper <= cfg.lower) { cfg.upper = cfg.lower * 1.1; document.getElementById("f-upper").value = cfg.upper; }
+    if (cfg.levels < 2) { cfg.levels = 2; document.getElementById("f-levels").value = 2; }
+    S.local = true;
+    writeCfg(cfg, BASE);
+    fillForm();
+    render();
+  });
+});
+document.getElementById("rows").addEventListener("change", function (e) {
+  var el = e.target;
+  if (!el || el.tagName !== "INPUT") return;
+  var lv = el.getAttribute("data-level");
+  if (el.value === "") delete fills[lv]; else fills[lv] = Math.max(0, Math.floor(Number(el.value) || 0));
+  writeFills(fills);
+  render();
+});
+document.getElementById("autofill").addEventListener("click", function () {
+  var built = buildLevels(cfg);
+  fills = {};
+  built.levels.forEach(function (lv) { fills[lv.level] = lv.plan; });
+  writeFills(fills); render();
+});
+document.getElementById("clearfill").addEventListener("click", function () {
+  fills = { __auto: false }; writeFills(fills); render();
+});
+document.getElementById("filter").addEventListener("change", render);
+document.getElementById("copycfg").addEventListener("click", function () {
+  var out = {
+    code: cfg.code, name: cfg.name, lower: cfg.lower, upper: cfg.upper, levels: cfg.levels,
+    budget: cfg.budget, endMultiple: cfg.endMultiple, tick: cfg.tick || 0,
+    feeRate: cfg.feeRate, taxRate: cfg.taxRate, entryPrice: cfg.entryPrice,
+    holdings: cfg.holdings || {}, sessions: cfg.sessions || [],
+    lastPrice: null, lastPriceAt: null
+  };
+  var text = JSON.stringify(out, null, 2);
+  var btn = this;
+  function done(ok) { btn.textContent = ok ? "복사했습니다" : "복사 실패 — 콘솔에 출력했습니다";
+    setTimeout(function () { btn.textContent = "설정 JSON 복사"; }, 2000); }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () { done(true); },
+      function () { console.log(text); done(false); });
+  } else { console.log(text); done(false); }
+});
+document.getElementById("resetcfg").addEventListener("click", function () {
+  localStorage.removeItem(LS_CFG);
+  S = readCfg(); cfg = S.cfg; BASE = S.base;
+  fillForm(); render();
+});
+
+fillForm();
+render();
+</script>

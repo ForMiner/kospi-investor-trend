@@ -1,0 +1,98 @@
+name: Grid buy/sell alert
+
+# Polls the price during KRX hours and pushes a Telegram message the moment a
+# grid level is crossed — you place the order yourself.
+#
+# It lives here for the same reason the KOSPI scrape does: the Claude cloud
+# sandbox sits behind an allowlist egress proxy that refuses finance.naver.com
+# and api.telegram.org with 403. GitHub runners have open outbound.
+
+on:
+  schedule:
+    # KRX 정규장 09:00~15:30 KST = 00:00~06:30 UTC, 평일. GitHub 의 스케줄러는
+    # 혼잡하면 몇 분씩 늦으므로 5분 간격이라도 실제로는 5~15분 간격으로 돕니다.
+    - cron: "*/5 0-5 * * 1-5"
+    - cron: "0,5,10,15,20,25,30 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      price:
+        description: "시세 대신 쓸 가격 (비워두면 실시간 조회)"
+        required: false
+      dry_run:
+        description: "true 면 알림도 기록도 남기지 않고 신호만 확인"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: grid-alert
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the ladder is configured
+        id: cfg
+        run: |
+          code=$(python3 -c "import json;print(json.load(open('grid/config.json')).get('code') or '')")
+          if [ -z "$code" ]; then
+            echo "::notice::grid/config.json 의 code 가 비어 있습니다 — 감시할 종목을 넣기 전까지 폴링하지 않습니다."
+            echo "ready=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "종목 $code 감시 중"
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Fail rather than skip: a silently-skipped alert is indistinguishable from
+      # a delivered one on the runs page, and this one is the whole point.
+      - name: Check the Telegram secrets
+        if: steps.cfg.outputs.ready == 'yes' && github.event.inputs.dry_run != 'true'
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 시크릿이 없습니다."
+            exit 1
+          fi
+
+      - name: Poll the price and alert on a crossing
+        if: steps.cfg.outputs.ready == 'yes'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PRICE: ${{ github.event.inputs.price }}
+          DRY: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -o pipefail
+          args=""
+          [ -n "$PRICE" ] && args="$args --price $PRICE"
+          [ "$DRY" = "true" ] && args="$args --dry-run"
+          python3 grid_bot.py $args 2>&1 | tee /tmp/grid.log
+
+      # grid_bot.py rewrites these two only when a level actually filled, so a
+      # quiet session leaves the tree clean and the repository commit-free.
+      - name: Commit the fill if one happened
+        if: steps.cfg.outputs.ready == 'yes' && github.event.inputs.dry_run != 'true'
+        run: |
+          if git diff --quiet -- grid/config.json data/grid_trades.csv; then
+            echo "체결 없음 — 커밋할 것이 없습니다."
+            exit 0
+          fi
+          summary=$(grep '^SIGNAL ' /tmp/grid.log | tr '\n' ' ' | sed 's/SIGNAL //g; s/ *$//')
+          [ -z "$summary" ] && summary="baseline"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add grid/config.json data/grid_trades.csv
+          git commit -m "Grid fill: ${summary}"
+          # Another poll may have pushed while this one ran; rebase and retry once.
+          git push || (git pull --rebase origin "${GITHUB_REF_NAME}" && git push)

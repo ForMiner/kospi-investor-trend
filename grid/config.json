@@ -1,0 +1,17 @@
+{
+  "code": "",
+  "name": "종목 미설정",
+  "lower": 1351000,
+  "upper": 1800000,
+  "levels": 19,
+  "budget": 633333333,
+  "endMultiple": 20,
+  "tick": 0,
+  "feeRate": 0,
+  "taxRate": 0,
+  "entryPrice": 1800000,
+  "holdings": {},
+  "sessions": [],
+  "lastPrice": null,
+  "lastPriceAt": null
+}
