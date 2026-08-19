@@ -372,14 +372,19 @@ function readCfg() {
   } catch (e) { /* ignore a corrupt entry */ }
   return { cfg: base, local: false, base: base };
 }
+function store(key, value) {
+  // A sandboxed iframe throws on localStorage rather than returning null, and
+  // an unhandled throw here would kill the input handler that called it.
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* 저장 불가 — 화면만 갱신 */ }
+}
 function writeCfg(cfg, base) {
   var slim = {};
   ["code","name","lower","upper","levels","budget","endMultiple","tick","feeRate","taxRate","entryPrice"]
     .forEach(function (k) { slim[k] = cfg[k]; });
-  localStorage.setItem(LS_CFG, JSON.stringify({ _base: JSON.stringify(base), cfg: slim }));
+  store(LS_CFG, { _base: JSON.stringify(base), cfg: slim });
 }
 function readFills() { try { return JSON.parse(localStorage.getItem(LS_FILL) || "{}") || {}; } catch (e) { return {}; } }
-function writeFills(f) { localStorage.setItem(LS_FILL, JSON.stringify(f)); }
+function writeFills(f) { store(LS_FILL, f); }
 
 var S = readCfg();
 var cfg = S.cfg, BASE = S.base, fills = readFills();
@@ -728,7 +733,7 @@ document.getElementById("copycfg").addEventListener("click", function () {
   } else { console.log(text); done(false); }
 });
 document.getElementById("resetcfg").addEventListener("click", function () {
-  localStorage.removeItem(LS_CFG);
+  try { localStorage.removeItem(LS_CFG); } catch (e) { /* 저장 불가 */ }
   S = readCfg(); cfg = S.cfg; BASE = S.base;
   fillForm(); render();
 });
